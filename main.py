@@ -126,7 +126,7 @@ class PokeproPlugin(Star):
         obj_msg = event.message_obj.message
         obj_msg.clear()
         obj_msg.extend([At(qq=event.get_self_id()), Plain(command)])
-        event.message_obj.message_str = command
+        # event.message_obj.message_str = command
         event.message_str = command
         self.context.get_event_queue().put_nowait(event)
         event.should_call_llm(True)
