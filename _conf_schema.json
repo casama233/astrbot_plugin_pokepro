@@ -76,5 +76,11 @@
         "type": "text",
         "hint": "触发图库回复时，随机调用图库路径里的一张图片，推荐用'astrbot_plugin_gallery'插件管理图库",
         "default": "data/plugins_data/astrbot_plugin_gallery/戳一戳"
+    },
+    "poke_keywords": {
+        "description": "戳一戳关键词",
+        "type": "text",
+        "hint": "唤醒bot的消息中包含列表中的关键词时，触发戳一戳，请用逗号隔开各个关键词",
+        "default": "笨蛋，人机，机器人，bot，哈喽，你好，傻，妈"
     }
 }

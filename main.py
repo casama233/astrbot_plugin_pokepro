@@ -21,7 +21,7 @@ from typing import List, Union
     "astrbot_plugin_pokepro",
     "Zhalslar",
     "【更专业的戳一戳插件】支持触发（反戳：文本：emoji：图库：meme：禁言：开盒：戳@某人）",
-    "1.0.8",
+    "1.0.9",
     "https://github.com/Zhalslar/astrbot_plugin_pokepro",
 )
 class PokeproPlugin(Star):
@@ -68,12 +68,14 @@ class PokeproPlugin(Star):
         self.gallery_path.mkdir(parents=True, exist_ok=True)
 
         # meme命令列表
-        self.meme_cmds_str = config.get("meme_cmds_str", "")
-        self.meme_cmds: list[str] = self._string_to_list(self.meme_cmds_str, "str")  # type: ignore
+        self.meme_cmds: list[str] = self._string_to_list(
+            config.get("meme_cmds_str", ""), "str"
+        )  # type: ignore
 
         # api命令列表
-        self.api_cmds_str = config.get("api_cmds_str", "")
-        self.api_cmds: list[str] = self._string_to_list(self.api_cmds_str, "str")  # type: ignore
+        self.api_cmds: list[str] = self._string_to_list(
+            config.get("api_cmds_str", ""), "str"
+        )  # type: ignore
 
         # 被戳llm提示模板
         self.llm_prompt_template = config.get("llm_prompt_template", "?")
@@ -85,6 +87,11 @@ class PokeproPlugin(Star):
         # 随机禁言时间范围
         ban_time_range_str = config.get("ban_time_range_str", "30~300")
         self.ban_time_range = tuple(map(int, ban_time_range_str.split("~")))
+
+        # 戳一戳关键词
+        self.poke_keywords: list[str] = self._string_to_list(
+            config.get("poke_keywords", ""), "str"
+        )  # type: ignore
 
     def _string_to_list(
         self,
@@ -126,7 +133,6 @@ class PokeproPlugin(Star):
         obj_msg = event.message_obj.message
         obj_msg.clear()
         obj_msg.extend([At(qq=event.get_self_id()), Plain(command)])
-        event.message_obj.message_str = command
         event.message_str = command
         self.context.get_event_queue().put_nowait(event)
         event.should_call_llm(True)
@@ -160,7 +166,6 @@ class PokeproPlugin(Star):
         except Exception as e:
             logger.error(f"LLM 调用失败：{e}")
             return None
-
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_poke(self, event: AiocqhttpMessageEvent):
@@ -210,17 +215,11 @@ class PokeproPlugin(Star):
     # ========== 响应函数 ==========
     async def poke_respond(self, event: AiocqhttpMessageEvent):
         """反戳"""
-        client = event.bot
-        group_id = event.get_group_id()
-        send_id = event.get_sender_id()
-        if group_id:
-            for _ in range(random.randint(1, self.poke_max_times)):
-                await client.group_poke(group_id=int(group_id), user_id=int(send_id))
-                await asyncio.sleep(self.poke_interval)
-        else:
-            for _ in range(random.randint(1, self.poke_max_times)):
-                await client.friend_poke(user_id=int(send_id))
-                await asyncio.sleep(self.poke_interval)
+        await self._poke(
+            event=event,
+            target_ids=event.get_sender_id(),
+            times=random.randint(1, self.poke_max_times),
+        )
         event.stop_event()
 
     async def llm_respond(self, event: AiocqhttpMessageEvent):
@@ -272,38 +271,82 @@ class PokeproPlugin(Star):
         """开盒"""
         await self._send_cmd(event, "盒")
 
-    @filter.command("戳", alias={"戳我"})
+    @filter.command("戳", alias={"戳我", "戳全体成员"})
     async def poke_handle(self, event: AiocqhttpMessageEvent):
-        """戳@xxx / 戳我"""
+        """戳@某人/我/全体成员"""
         target_ids = [
             str(seg.qq)
             for seg in event.get_messages()
             if isinstance(seg, At) and str(seg.qq) != event.get_self_id()
         ]
-        if "戳我" in event.message_str.split():
+        client = event.bot
+        group_id = event.get_group_id()
+        msg_str = event.message_str
+        if "我" in msg_str:
             target_ids.append(event.get_sender_id())
+        if "全体成员" in msg_str:
+            try:
+                members_data = await client.get_group_member_list(
+                    group_id=int(group_id)
+                )
+                user_ids = [member.get("user_id", "") for member in members_data]
+                # 由于每天戳一戳上限为200个，故只随机取200个
+                target_ids = random.sample(user_ids, min(200, len(user_ids)))
+            except Exception as e:
+                yield event.plain_result(f"获取群成员信息失败：{e}")
+                return
+        if not target_ids:
+            result: dict = await client.get_group_msg_history(group_id=int(group_id))
+            target_ids = [msg["sender"]["user_id"] for msg in result["messages"]]
         if not target_ids:
             return
         parsed_msg = event.message_str.split()
         times = (
             int(parsed_msg[-1])
             if parsed_msg[-1].isdigit()
-            else random.randint(1, self.poke_max_times)
+            else 1
         )
+
+        await self._poke(event, target_ids, times)
+        event.stop_event()
+
+    async def _poke(
+        self,
+        event: AiocqhttpMessageEvent,
+        target_ids: list | str,
+        times: int = 1,
+    ):
+        """执行戳一戳"""
+        client = event.bot
         group_id = event.get_group_id()
+        self_id = int(event.get_self_id())
+        if isinstance(target_ids, (str, int)):
+            target_ids = [target_ids]
+        target_ids = list(
+            dict.fromkeys(  # 保留顺序去重
+                int(tid) for tid in target_ids if int(tid) != self_id
+            )
+        )
+
+        async def poke_func(tid: int):
+            if group_id:
+                await client.group_poke(group_id=int(group_id), user_id=tid)
+            else:
+                await client.friend_poke(user_id=tid)
 
         try:
-            for target_id in target_ids:
-                if group_id:
-                    for _ in range(times):
-                        await event.bot.group_poke(
-                            group_id=int(group_id), user_id=int(target_id)
-                        )
-                        await asyncio.sleep(self.poke_interval)
-                else:
-                    for _ in range(times):
-                        await event.bot.friend_poke(user_id=int(target_id))
-                        await asyncio.sleep(self.poke_interval)
+            for tid in target_ids:
+                for _ in range(times):
+                    await poke_func(tid)
+                    await asyncio.sleep(self.poke_interval)
         except Exception as e:
-            logger.error(f"发送戳一戳失败：{e}")
-        event.stop_event()
+            logger.error(f"执行戳一戳失败：{e}")
+
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def keyword_poke(self, event: AiocqhttpMessageEvent):
+        if event.is_at_or_wake_command:
+            for keyword in self.poke_keywords:
+                if keyword in event.message_str:
+                    await self._poke(event, event.get_sender_id())
+                    break
