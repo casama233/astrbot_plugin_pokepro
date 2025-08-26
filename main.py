@@ -21,13 +21,13 @@ from typing import List, Union
     "astrbot_plugin_pokepro",
     "Zhalslar",
     "【更专业的戳一戳插件】支持触发（反戳：文本：emoji：图库：meme：禁言：开盒：戳@某人）",
-    "1.0.9",
+    "1.1.0",
     "https://github.com/Zhalslar/astrbot_plugin_pokepro",
 )
 class PokeproPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        self.config = config
+        self.conf = config
         # 获取所有 _respond 方法（反戳：LLM：face：图库：禁言：meme：api：开盒）
         self.response_handlers = [
             self.poke_respond,
@@ -46,51 +46,26 @@ class PokeproPlugin(Star):
         self.weights: list[int] = weight_list + [1] * (
             len(self.response_handlers) - len(weight_list)
         )
-        # 连戳最大次数
-        self.poke_max_times: int = config.get("poke_max_times", 5)
 
-        # 冷却时间
-        self.cooldown_seconds = config.get("cooldown_seconds", 10)
         # 记录每个 user_id 的最后触发时间
         self.last_trigger_time = {}
 
-        # 跟戳概率
-        self.follow_poke_th: float = config.get("follow_poke_th", 0.05)
-
         # 表情ID列表
-        face_ids_str = config.get("face_ids_str", "")
-        self.face_ids: list[int] = self._string_to_list(face_ids_str, "int")  # type: ignore
-
-        self.poke_interval: float = config.get("poke_interval", 0)
+        self.face_ids: list[int] = self._string_to_list(config["face_ids_str"], "int")  # type: ignore
 
         # 戳一戳图库路径
         self.gallery_path: Path = Path(config.get("gallery_path", ""))
         self.gallery_path.mkdir(parents=True, exist_ok=True)
 
         # meme命令列表
-        self.meme_cmds: list[str] = self._string_to_list(
-            config.get("meme_cmds_str", ""), "str"
-        )  # type: ignore
+        self.meme_cmds: list[str] = self._string_to_list(config["meme_cmds_str"], "str")  # type: ignore
 
         # api命令列表
-        self.api_cmds: list[str] = self._string_to_list(
-            config.get("api_cmds_str", ""), "str"
-        )  # type: ignore
-
-        # 被戳llm提示模板
-        self.llm_prompt_template = config.get("llm_prompt_template", "?")
-        # 禁言提示模板
-        self.ban_prompt_template = config.get("ban_prompt_template", "?")
-        # 禁言失败提示模板
-        self.ban_fail_prompt_template = config.get("ban_fail_prompt_template", "?")
-
-        # 随机禁言时间范围
-        ban_time_range_str = config.get("ban_time_range_str", "30~300")
-        self.ban_time_range = tuple(map(int, ban_time_range_str.split("~")))
+        self.api_cmds: list[str] = self._string_to_list(config["api_cmds_str"], "str")  # type: ignore
 
         # 戳一戳关键词
         self.poke_keywords: list[str] = self._string_to_list(
-            config.get("poke_keywords", ""), "str"
+            config["poke_keywords"], "str"
         )  # type: ignore
 
     def _string_to_list(
@@ -187,7 +162,7 @@ class PokeproPlugin(Star):
         # 冷却机制
         current_time = time.monotonic()
         last_time = self.last_trigger_time.get(user_id, 0)
-        if current_time - last_time < self.cooldown_seconds:
+        if current_time - last_time < self.conf["cooldown_seconds"]:
             return
         self.last_trigger_time[user_id] = current_time
 
@@ -197,7 +172,7 @@ class PokeproPlugin(Star):
             if (
                 group_id
                 and user_id != self_id
-                and random.random() < self.follow_poke_th
+                and random.random() < self.conf["follow_poke_th"]
             ):
                 await event.bot.group_poke(group_id=int(group_id), user_id=target_id)
             return
@@ -218,13 +193,13 @@ class PokeproPlugin(Star):
         await self._poke(
             event=event,
             target_ids=event.get_sender_id(),
-            times=random.randint(1, self.poke_max_times),
+            times=random.randint(1, self.conf["poke_max_times"]),
         )
         event.stop_event()
 
     async def llm_respond(self, event: AiocqhttpMessageEvent):
         """调用llm回复"""
-        text = await self._get_llm_respond(event, self.llm_prompt_template)
+        text = await self._get_llm_respond(event, self.conf["llm_prompt_template"])
         await event.send(MessageChain(chain=[Plain(text)]))  # type: ignore
         event.stop_event()
 
@@ -248,12 +223,12 @@ class PokeproPlugin(Star):
             await event.bot.set_group_ban(
                 group_id=int(event.get_group_id()),
                 user_id=int(event.get_sender_id()),
-                duration=random.randint(*self.ban_time_range),
+                duration=random.randint(*self.conf["ban_time"].split("~")),
             )
-            prompt_template = self.ban_prompt_template
+            prompt_template = self.conf["ban_prompt_template"]
 
         except Exception:
-            prompt_template = self.ban_fail_prompt_template
+            prompt_template = self.conf["ban_fail_prompt_template"]
         finally:
             text = await self._get_llm_respond(event, prompt_template)
             await event.send(MessageChain(chain=[Plain(text)]))  # type: ignore
@@ -279,15 +254,19 @@ class PokeproPlugin(Star):
             for seg in event.get_messages()
             if isinstance(seg, At) and str(seg.qq) != event.get_self_id()
         ]
-        client = event.bot
-        group_id = event.get_group_id()
-        msg_str = event.message_str
-        if "我" in msg_str:
+
+        parsed_msg = event.message_str.split()
+        times = int(parsed_msg[-1]) if parsed_msg[-1].isdigit() else 1
+        if not event.is_admin():
+            times = min(self.conf["poke_max_times"], times)
+
+        if "我" in event.message_str:
             target_ids.append(event.get_sender_id())
-        if "全体成员" in msg_str:
+
+        if "全体成员" in event.message_str:
             try:
-                members_data = await client.get_group_member_list(
-                    group_id=int(group_id)
+                members_data = await event.bot.get_group_member_list(
+                    group_id=int(event.get_group_id())
                 )
                 user_ids = [member.get("user_id", "") for member in members_data]
                 # 由于每天戳一戳上限为200个，故只随机取200个
@@ -295,17 +274,15 @@ class PokeproPlugin(Star):
             except Exception as e:
                 yield event.plain_result(f"获取群成员信息失败：{e}")
                 return
+
         if not target_ids:
-            result: dict = await client.get_group_msg_history(group_id=int(group_id))
+            result: dict = await event.bot.get_group_msg_history(
+                group_id=int(event.get_group_id())
+            )
             target_ids = [msg["sender"]["user_id"] for msg in result["messages"]]
+
         if not target_ids:
             return
-        parsed_msg = event.message_str.split()
-        times = (
-            int(parsed_msg[-1])
-            if parsed_msg[-1].isdigit()
-            else 1
-        )
 
         await self._poke(event, target_ids, times)
         event.stop_event()
@@ -338,10 +315,9 @@ class PokeproPlugin(Star):
             for tid in target_ids:
                 for _ in range(times):
                     await poke_func(tid)
-                    await asyncio.sleep(self.poke_interval)
+                    await asyncio.sleep(self.conf["poke_interval"])
         except Exception as e:
             logger.error(f"执行戳一戳失败：{e}")
-
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_poke(self, event: AiocqhttpMessageEvent):
