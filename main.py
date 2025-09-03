@@ -21,7 +21,7 @@ from typing import List, Union
     "astrbot_plugin_pokepro",
     "Zhalslar",
     "【更专业的戳一戳插件】支持触发（反戳：文本：emoji：图库：meme：禁言：开盒：戳@某人）",
-    "1.1.0",
+    "1.1.1",
     "https://github.com/Zhalslar/astrbot_plugin_pokepro",
 )
 class PokeproPlugin(Star):
@@ -223,7 +223,7 @@ class PokeproPlugin(Star):
             await event.bot.set_group_ban(
                 group_id=int(event.get_group_id()),
                 user_id=int(event.get_sender_id()),
-                duration=random.randint(*self.conf["ban_time"].split("~")),
+                duration=random.randint(*map(int, self.conf["ban_time"].split("~"))),
             )
             prompt_template = self.conf["ban_prompt_template"]
 
