@@ -21,7 +21,7 @@ from typing import List, Union
     "astrbot_plugin_pokepro",
     "Zhalslar",
     "【更专业的戳一戳插件】支持触发（反戳：文本：emoji：图库：meme：禁言：开盒：戳@某人）",
-    "1.1.1",
+    "1.1.2",
     "https://github.com/Zhalslar/astrbot_plugin_pokepro",
 )
 class PokeproPlugin(Star):
@@ -116,22 +116,29 @@ class PokeproPlugin(Star):
         self, event: AiocqhttpMessageEvent, prompt_template: str
     ) -> str | None:
         """调用llm回复"""
+        using_provider = self.context.get_using_provider()
+        if not using_provider:
+            return None
         try:
             umo = event.unified_msg_origin
             curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                 umo
             )
+            if not curr_cid:
+                return None
             conversation = await self.context.conversation_manager.get_conversation(
                 umo, curr_cid
             )
+            if not conversation:
+                return None
             contexts = json.loads(conversation.history)
 
-            personality = self.context.get_using_provider().curr_personality
+            personality = using_provider.curr_personality
             personality_prompt = personality["prompt"] if personality else ""
 
             format_prompt = prompt_template.format(username=event.get_sender_name())
 
-            llm_response = await self.context.get_using_provider().text_chat(
+            llm_response = await using_provider.text_chat(
                 prompt=format_prompt,
                 system_prompt=personality_prompt,
                 contexts=contexts,
@@ -263,7 +270,7 @@ class PokeproPlugin(Star):
         if "我" in event.message_str:
             target_ids.append(event.get_sender_id())
 
-        if "全体成员" in event.message_str:
+        if "全体成员" in event.message_str and event.is_admin():
             try:
                 members_data = await event.bot.get_group_member_list(
                     group_id=int(event.get_group_id())
