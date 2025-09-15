@@ -21,7 +21,7 @@ from typing import List, Union
     "astrbot_plugin_pokepro",
     "Zhalslar",
     "【更专业的戳一戳插件】支持触发（反戳：文本：emoji：图库：meme：禁言：开盒：戳@某人）",
-    "1.1.2",
+    "1.1.3",
     "https://github.com/Zhalslar/astrbot_plugin_pokepro",
 )
 class PokeproPlugin(Star):
@@ -108,9 +108,12 @@ class PokeproPlugin(Star):
         obj_msg = event.message_obj.message
         obj_msg.clear()
         obj_msg.extend([At(qq=event.get_self_id()), Plain(command)])
+        event.is_at_or_wake_command = True
         event.message_str = command
-        self.context.get_event_queue().put_nowait(event)
         event.should_call_llm(True)
+        event.set_extra("is_poke_event", True)
+        self.context.get_event_queue().put_nowait(event)
+
 
     async def _get_llm_respond(
         self, event: AiocqhttpMessageEvent, prompt_template: str
@@ -152,6 +155,8 @@ class PokeproPlugin(Star):
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_poke(self, event: AiocqhttpMessageEvent):
         """监听并响应戳一戳事件"""
+        if event.get_extra("is_poke_event"):
+            return
         raw_message = getattr(event.message_obj, "raw_message", None)
 
         if (
