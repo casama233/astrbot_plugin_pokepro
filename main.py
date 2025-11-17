@@ -1,29 +1,22 @@
 import asyncio
 import json
-from pathlib import Path
 import random
 import re
 import time
+from pathlib import Path
+
+from astrbot.api import logger
 from astrbot.api.event import filter
+from astrbot.api.message_components import At, Face, Image, Plain, Poke
 from astrbot.api.star import Context, Star, register
-from astrbot.api.message_components import Plain, Image, At, Face, Poke
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
-from astrbot.api import logger
-
-from typing import List, Union
 
 
-@register(
-    "astrbot_plugin_pokepro",
-    "Zhalslar",
-    "【更专业的戳一戳插件】支持触发（反戳：文本：emoji：图库：meme：禁言：开盒：戳@某人）",
-    "1.1.3",
-    "https://github.com/Zhalslar/astrbot_plugin_pokepro",
-)
+@register("astrbot_plugin_pokepro", "Zhalslar", "...", "...")
 class PokeproPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -72,8 +65,8 @@ class PokeproPlugin(Star):
         self,
         input_str: str,
         return_type: str = "str",
-        sep: Union[str, list[str]] = [":", "：", ",", "，"],
-    ) -> List[Union[str, int]]:
+        sep: str | list[str] = [":", "：", ",", "，"],
+    ) -> list[str | int]:
         """
         将字符串转换为列表，支持自定义一个或多个分隔符和返回类型。
 
@@ -114,6 +107,20 @@ class PokeproPlugin(Star):
         event.set_extra("is_poke_event", True)
         self.context.get_event_queue().put_nowait(event)
 
+    @staticmethod
+    async def get_nickname(event: AiocqhttpMessageEvent, user_id) -> str:
+        """获取指定群友的群昵称或Q名"""
+        client = event.bot
+        group_id = event.get_group_id()
+        if group_id:
+            member_info = await client.get_group_member_info(
+                group_id=int(group_id), user_id=int(user_id)
+            )
+            return member_info.get("card") or member_info.get("nickname")
+        else:
+            stranger_info = await client.get_stranger_info(user_id=int(user_id))
+            return stranger_info.get("nickname")
+
 
     async def _get_llm_respond(
         self, event: AiocqhttpMessageEvent, prompt_template: str
@@ -138,8 +145,8 @@ class PokeproPlugin(Star):
 
             personality = using_provider.curr_personality
             personality_prompt = personality["prompt"] if personality else ""
-
-            format_prompt = prompt_template.format(username=event.get_sender_name())
+            username = self.get_nickname(event, event.get_sender_id())
+            format_prompt = prompt_template.format(username=username)
 
             llm_response = await using_provider.text_chat(
                 prompt=format_prompt,
@@ -309,7 +316,7 @@ class PokeproPlugin(Star):
         client = event.bot
         group_id = event.get_group_id()
         self_id = int(event.get_self_id())
-        if isinstance(target_ids, (str, int)):
+        if isinstance(target_ids, str | int):
             target_ids = [target_ids]
         target_ids = list(
             dict.fromkeys(  # 保留顺序去重
