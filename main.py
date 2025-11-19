@@ -10,10 +10,13 @@ from astrbot.api.event import filter
 from astrbot.api.message_components import At, Face, Image, Plain, Poke
 from astrbot.api.star import Context, Star, register
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import VERSION
+from astrbot.core.db.po import Persona
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
+from astrbot.core.utils.version_comparator import VersionComparator
 
 
 @register("astrbot_plugin_pokepro", "Zhalslar", "...", "...")
@@ -21,6 +24,11 @@ class PokeproPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.conf = config
+
+        # 检查版本
+        if not VersionComparator.compare_version(VERSION, "4.5.7") >= 0:
+            raise Exception("AstrBot 版本过低, 请升级至 4.5.7 或更高版本")
+
         # 获取所有 _respond 方法（反戳：LLM：face：图库：禁言：meme：api：开盒）
         self.response_handlers = [
             self.poke_respond,
@@ -126,30 +134,39 @@ class PokeproPlugin(Star):
     ) -> str | None:
         """调用llm回复"""
         umo = event.unified_msg_origin
+
+        # 获取当前会话上下文
+        conv_mgr = self.context.conversation_manager
+        curr_cid = await conv_mgr.get_curr_conversation_id(umo)
+        if not curr_cid:
+            return None
+        conversation = await conv_mgr.get_conversation(umo, curr_cid)
+        if not conversation:
+            return None
+        contexts = json.loads(conversation.history)
+
+        # 获取当前人格提示词
         using_provider = self.context.get_using_provider(umo)
         if not using_provider:
             return None
+
+        persona_id = conversation.persona_id
+        if not persona_id:
+            return None
+        persona: Persona = await self.context.persona_manager.get_persona(
+            persona_id=persona_id
+        )
+
+        # 获取提示词
+        username = await self.get_nickname(event, event.get_sender_id())
+        prompt = prompt_template.format(username=username)
+
+        # 调用llm
         try:
-            curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
-                umo
-            )
-            if not curr_cid:
-                return None
-            conversation = await self.context.conversation_manager.get_conversation(
-                umo, curr_cid
-            )
-            if not conversation:
-                return None
-            contexts = json.loads(conversation.history)
-
-            personality = using_provider.curr_personality
-            personality_prompt = personality["prompt"] if personality else ""
-            username = self.get_nickname(event, event.get_sender_id())
-            format_prompt = prompt_template.format(username=username)
-
+            logger.debug(f"[戳一戳] LLM 调用：{prompt}")
             llm_response = await using_provider.text_chat(
-                prompt=format_prompt,
-                system_prompt=personality_prompt,
+                system_prompt=persona.system_prompt,
+                prompt=prompt,
                 contexts=contexts,
             )
             return llm_response.completion_text
@@ -217,9 +234,9 @@ class PokeproPlugin(Star):
 
     async def llm_respond(self, event: AiocqhttpMessageEvent):
         """调用llm回复"""
-        text = await self._get_llm_respond(event, self.conf["llm_prompt_template"])
-        await event.send(MessageChain(chain=[Plain(text)]))  # type: ignore
-        event.stop_event()
+        if text := await self._get_llm_respond(event, self.conf["llm_prompt_template"]):
+            await event.send(event.plain_result(text))
+            event.stop_event()
 
     async def face_respond(self, event: AiocqhttpMessageEvent):
         """回复emoji(QQ表情)"""
