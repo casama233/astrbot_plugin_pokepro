@@ -121,16 +121,15 @@ class PokeproPlugin(Star):
             stranger_info = await client.get_stranger_info(user_id=int(user_id))
             return stranger_info.get("nickname")
 
-
     async def _get_llm_respond(
         self, event: AiocqhttpMessageEvent, prompt_template: str
     ) -> str | None:
         """调用llm回复"""
-        using_provider = self.context.get_using_provider()
+        umo = event.unified_msg_origin
+        using_provider = self.context.get_using_provider(umo)
         if not using_provider:
             return None
         try:
-            umo = event.unified_msg_origin
             curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                 umo
             )
