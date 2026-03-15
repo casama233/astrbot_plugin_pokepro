@@ -131,6 +131,11 @@ class MemeConfig(ConfigNode):
     pool: list[str]
 
 
+class RecordConfig(ConfigNode):
+    weight: int
+    pool: list[str]
+
+
 class BanConfig(ConfigNode):
     weight: int
     duration: int
@@ -142,6 +147,7 @@ class BanConfig(ConfigNode):
 class CommandConfig(ConfigNode):
     weight: int
     pool: list[str]
+
 
 class SchedulerConfig(ConfigNode):
     enabled: bool
@@ -159,6 +165,7 @@ class PluginConfig(ConfigNode):
     llm: LLMConfig
     face: FaceConfig
     meme: MemeConfig
+    record: RecordConfig
     ban: BanConfig
     command: CommandConfig
 
@@ -248,12 +255,21 @@ class PluginConfig(ConfigNode):
         abs_path = self.data_dir / rel_path
         return str(abs_path.resolve())
 
+    def get_record(self) -> str:
+        """获取语音"""
+        if not self.record.pool:
+            return ""
+        rel_path = Path(random.choice(self.record.pool))
+        abs_path = self.data_dir / rel_path
+        return str(abs_path.resolve())
+
     def weight_of(self, module: PokeModel) -> int:
         return {
             PokeModel.ANTIPOKE: self.antipoke.weight,
             PokeModel.LLM: self.llm.weight,
             PokeModel.FACE: self.face.weight,
-            PokeModel.meme: self.meme.weight,
+            PokeModel.MEME: self.meme.weight,
+            PokeModel.RECORD: self.record.weight,
             PokeModel.BAN: self.ban.weight,
             PokeModel.COMMAND: self.command.weight,
         }[module]

@@ -83,3 +83,6 @@ class PokeproPlugin(Star):
                     target_ids=[event.get_sender_id()],
                     times=1,
                 )
+
+
+
