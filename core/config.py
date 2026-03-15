@@ -193,8 +193,6 @@ class PluginConfig(ConfigNode):
         self.logo_path = self.plugin_dir / "logo.png"
         self.file_pool_dir = self.data_dir / "files" / "meme" / "pool"
         self.file_pool_dir.mkdir(parents=True, exist_ok=True)
-        self.meme.pool = self.meme.pool or []
-        self.meme.paths = self.meme.paths or []
 
         self.meme_image_pool = self._collect_meme_images()
         self._ensure_non_empty_pools()
