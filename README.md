@@ -120,3 +120,11 @@ _✨ 专业戳一戳 ✨_
 ## 📌 注意事项
 
 - 想第一时间得到反馈可以来作者的插件反馈群（QQ群）：**-199**（不点 star 不给进）
+
+## 上游來源與授權
+
+GitHub identifies this repository as a fork of the upstream project, but the upstream repository has no LICENSE file. The GPL-3.0 file in this fork cannot grant rights to upstream code whose author did not license it. Do not redistribute upstream-derived portions until the upstream author grants permission or the provenance is independently established.
+
+- 上游專案：[Zhalslar/astrbot_plugin_pokepro](https://github.com/Zhalslar/astrbot_plugin_pokepro)
+- 上游授權狀態：UNLICENSED_UPSTREAM
+- 本倉庫保留上游來源脈絡；請勿將本倉庫的新增修改誤認為上游作者的作品，也勿將本倉庫授權擴張到第三方素材、資料或依賴。
