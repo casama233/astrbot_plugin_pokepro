@@ -128,3 +128,7 @@ GitHub identifies this repository as a fork of the upstream project, but the ups
 - 上游專案：[Zhalslar/astrbot_plugin_pokepro](https://github.com/Zhalslar/astrbot_plugin_pokepro)
 - 上游授權狀態：UNLICENSED_UPSTREAM
 - 本倉庫保留上游來源脈絡；請勿將本倉庫的新增修改誤認為上游作者的作品，也勿將本倉庫授權擴張到第三方素材、資料或依賴。
+
+## 上游授權範圍說明
+
+本倉庫是 [Zhalslar/astrbot_plugin_pokepro](https://github.com/Zhalslar/astrbot_plugin_pokepro) 的 fork。經核查，上游目前沒有提供 LICENSE 文件。因此，本倉庫的 GPL-3.0 LICENSE **不能替上游作者授權**，也不能單方面將上游程式碼重新授權為 GPL。除非取得上游作者明確許可，或逐段確認相關內容是獨立創作，否則不得將上游衍生部分另行發布、打包或納入其他專案。倉庫中的 GPL 聲明不得解讀為已清除這項限制。
