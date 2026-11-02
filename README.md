@@ -5,6 +5,8 @@
 
 # astrbot_plugin_pokepro
 
+**简体中文** · [繁體中文](README.zh-TW.md) · [English](README.en.md)
+
 _✨ 专业戳一戳 ✨_  
 
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
